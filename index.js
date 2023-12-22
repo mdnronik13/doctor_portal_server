@@ -8,6 +8,11 @@ const app = express();
 
 //Middle Ware //
 
+//sms
+var sid = "ACdf72c3cba389e7fb77455a84bf23271d";
+var auth_token = "c02cea388b803665f0862e6e42304291";
+var twilio = require("twilio")(sid, auth_token);
+
 app.use(cors());
 app.use(express.json());
 
@@ -59,7 +64,12 @@ async function run() {
     //     }
     //     next();
     // }
-
+    app.delete("/users/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: ObjectId(id) };
+      const result = await usersCollection.deleteOne(filter);
+      res.send(result);
+    });
     // Appointment Data //
     app.get("/appointments", async (req, res) => {
       const date = req.query.date;
@@ -86,30 +96,46 @@ async function run() {
     });
     // Dashboard Appointment //
 
-
     app.get("/bookings", async (req, res) => {
-      const query = {};
+      const email = req.query.email;
+      const query = { email: email };
       const bookings = await bookingsCollection.find(query).toArray();
       res.send(bookings);
     });
 
-    
     //    Booking Data //
     app.post("/bookings", async (req, res) => {
       const booking = req.body;
-      console.log(booking);
+      //console.log(booking);
       const query = {
         appointmentDate: booking.appointmentDate,
         email: booking.email,
         treatment: booking.treatment,
+        doctor: booking.doctor,
+        hospital: booking.hospital,
       };
       const alreadyBooked = await bookingsCollection.find(query).toArray();
-      console.log(booking);
+      //const doctor= await doctorsCollection.find(booking.treatment).toArray();
+      //console.log(booking);
       if (alreadyBooked.length) {
         const message = `You Already have booked on ${booking.appointmentDate}`;
         return res.send({ acknowledged: false, message });
       }
+      //console.log("Booking");
       const result = await bookingsCollection.insertOne(booking);
+      twilio.messages
+        .create({
+          from: "+12056773656",
+          to: "+8801727985815",
+          body: `${booking.patient} booking for an appointment at ${booking.appointmentDate} and patient number is ${booking.phone}`,
+        })
+        .then(function (res) {
+          console.log("message has sent!");
+        })
+        .catch(function (err) {
+          console.log(err);
+        });
+
       res.send(result);
     });
     //   JWT TOKen //
@@ -144,8 +170,9 @@ async function run() {
 
     app.post("/users", async (req, res) => {
       const user = req.body;
-      console.log(user);
+      //console.log(user);
       const result = await usersCollection.insertOne(user);
+      //console.log(user);
       res.send(result);
     });
     // admin role //
@@ -153,26 +180,65 @@ async function run() {
     app.get("/users/admin/:email", async (req, res) => {
       const email = req.params.email;
       const query = { email };
+      const role = req.params.role;
       const user = await usersCollection.findOne(query);
+      console.log(user);
       res.send({ isAdmin: user?.role === "admin" });
     });
 
-    app.put("/users/admin/:id", async (req, res) => {
-      const decodedEmail = req.decoded.email;
-      const query = { email: decodedEmail };
-      const user = await usersCollection.findOne(query);
+    // app.put("/users/admin/:email", async (req, res) => {
+    //   console.log(req.params.phone);
+    //   console.log('hello');
+    //   const Email = req.params.email;
+    //   const query = { email: Email };
+    //   //console.log(query);
+    //   const user = await usersCollection.findOne(query);
+    //   //console.log(user?.phone);
+    //   if (user?.role !== "admin") {
+    //     //console.log("Hello world");
+    //     return res.status(403).send({ message: "Forbidden Access" });
+    //   }
+    //   const id = req.params.id;
+    //   const filter = { _id: ObjectId(id) };
+    //   const options = { upsert: true };
+    //   const updateDoc = {
+    //     $set: {
+    //       role: "admin",
+    //     },
+    //   };
+    //   console.log("hello");
+    //   const result = await usersCollection.updateOne(
+    //     filter,
+    //     updateDoc,
+    //     options
+    //   );
+    //   res.send(result);
+    // });
 
-      if (user?.role !== "admin") {
-        return res.status(403).send({ message: "Forbidden Access" });
-      }
-      const id = req.params.id;
-      const filter = { _id: ObjectId(id) };
+    app.put("/users/admin/:id", async (req, res) => {
+      //console.log(req.params);
+      const decodedEmail = req.params.id;
+      console.log(decodedEmail);
+      const query = { email: decodedEmail };
+      console.log(query);
+      const user = await usersCollection.findOne(query);
+      console.log(user);
+      // if (user?.role !== "admin") {
+      //   return res.status(403).send({ message: "Forbidden Access" });
+      // }
+
+      const idd = user.id;
+      const filter = { _id: ObjectId(idd) };
       const options = { upsert: true };
       const updateDoc = {
         $set: {
+          id:filter,
+          name:user.name,
+          email:user.email,         
           role: "admin",
         },
       };
+      console.log(filter,options,updateDoc);
       const result = await usersCollection.updateOne(
         filter,
         updateDoc,
@@ -180,7 +246,6 @@ async function run() {
       );
       res.send(result);
     });
-
     // doctor collection
 
     app.get("/doctors", async (req, res) => {
@@ -191,6 +256,7 @@ async function run() {
 
     app.post("/doctors", async (req, res) => {
       const doctor = req.body;
+      console.log(doctor);
       const result = await doctorsCollection.insertOne(doctor);
       res.send(result);
     });
